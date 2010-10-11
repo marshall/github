@@ -9,6 +9,8 @@ chmod 755 /usr/bin/github
 
 Usage
 -----
+<code>
+<pre>
 Usage: github (options) [command] [args]
 
 Commands:
@@ -23,3 +25,5 @@ Options:
   -h, --help            show this help message and exit
   -b BRANCH, --branch=BRANCH
                         use BRANCH instead of your current working branch
+</pre>
+</code>
