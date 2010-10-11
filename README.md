@@ -4,14 +4,13 @@ A simple command line frontend for navigating a git project in the github web in
 
 Installation
 ------------
-<code><pre>
+<pre>
 cp github /usr/bin
 chmod 755 /usr/bin/github
-</pre></code>
+</pre>
 
 Usage
 -----
-<code>
 <pre>
 Usage: github (options) [command] [args]
 
@@ -28,4 +27,3 @@ Options:
   -b BRANCH, --branch=BRANCH
                         use BRANCH instead of your current working branch
 </pre>
-</code>
