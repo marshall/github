@@ -4,8 +4,10 @@ A simple command line frontend for navigating a git project in the github web in
 
 Installation
 ------------
+<code><pre>
 cp github /usr/bin
 chmod 755 /usr/bin/github
+</pre></code>
 
 Usage
 -----
