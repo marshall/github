@@ -1,0 +1,166 @@
+#!/usr/bin/env python
+"""
+   Copyright 2010 Marshall Culpepper
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+"""
+import os, sys, subprocess, platform
+from optparse import OptionParser
+
+usage = """Usage: %prog (options) [command] [args]
+
+Commands:
+  help		print this usage
+  view		open github's "blob" view on file(s) passed in args
+  blame		open github's "blame" view on file(s) passed in args
+  log		open github's "commit" view for the branch (or file(s) passed in args)
+  browse	open github's project page"""
+
+parser = OptionParser(usage=usage, version="%prog 0.1")
+parser.add_option("-b", "--branch", dest="branch", help="use BRANCH instead of your current working branch", metavar="BRANCH", default=None)
+(options, args) = parser.parse_args()
+
+if len(args) == 0:
+	parser.error('missing required command')
+
+class Github:
+	def __init__(self, options, args, cwd):
+		self.options = options
+		self.args = args
+		self.branch = self.getBranch()
+		self.project = self.getGithubProject()
+		self.root = self.getGitRoot()
+		self.cwd = cwd
+		self.__commands__ = {'blame': self.blame, 'view': self.view, 'log': self.log, 'browse': self.browse, 'help': self.help}
+	
+	def git(self, *args):
+		gitArgs = ['git']
+		gitArgs.extend(args)
+		return subprocess.Popen(gitArgs, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+
+	def getBranch(self):
+		branch = self.options.branch
+		if branch is None:
+			(out, err) = self.git('branch')
+			for b in out.splitlines():
+				star = b.find('*')
+				if star != -1:
+					branch = b[star+2:].strip()
+					break
+			if branch is None:
+				parser.error("couldn't determine your current branch, is this a git repository?")
+		return branch
+
+	def getGithubProject(self):
+		(out, err) = self.git('config', 'remote.origin.url')
+		remoteOrigin = out.strip()
+		commitPrefix = "git@github.com:"
+		commitUrl = remoteOrigin.find(commitPrefix)
+		anonPrefix = "git://github.com/"
+		anonUrl = remoteOrigin.find(anonPrefix)
+		httpPrefix = "http://github.com/"
+		httpUrl = remoteOrigin.find(httpPrefix)
+	
+		if commitUrl != -1:
+			return remoteOrigin[len(commitPrefix):len(remoteOrigin)-4]
+		elif anonUrl != -1:
+			return remoteOrigin[len(anonPrefix):len(remoteOrigin)-4]
+		elif httpUrl != -1:
+			return remoteOrigin[len(httpPrefix):len(remoteOrigin)-4]
+		return None
+	
+	def getGitRoot(self):
+		(out, err) = self.git('rev-parse', '--show-toplevel')
+		if len(err) > 0:
+			return None
+		gitDir = out.strip()
+		return gitDir
+	
+	def inGitTree(self, path):
+		(out, err) = self.git('ls-tree', 'HEAD', path)
+		return len(out.strip()) > 0
+		
+	def openBrowser(self, urls):
+		if platform.system() == 'Darwin':
+			openCmd = ['/usr/bin/open']
+			if type(urls) == list:
+				openCmd.extend(urls)
+			else:
+				openCmd.append(urls)
+			os.execv("/usr/bin/open", openCmd)
+
+	def splitSourceLine(self, file):
+		tokens = file.split(':')
+		line = -1
+		if len(tokens) > 1:
+			line = tokens[1]
+		return (tokens[0], line)
+	
+	def buildUrlsFromFiles(self, files, callback, linePrefix='L'):
+		urls = []
+		for file in files:
+			(file, line) = self.splitSourceLine(file)
+			if not self.inGitTree(file):
+				parser.error(file + " not in git tree")
+			repoRelative = os.path.relpath(file, self.root)
+			url = callback(repoRelative)
+			if line != -1:
+				url += '#' + linePrefix + line
+			urls.append(url)
+		return urls
+	
+	def blame(self):
+		if len(self.args) == 0:
+			parser.error('no files given to blame')
+
+		def blameUrl(relativePath):
+			return 'http://github.com/%s/blame/%s/%s' % (self.project, self.branch, relativePath)
+		
+		self.openBrowser(self.buildUrlsFromFiles(self.args, blameUrl, linePrefix='LID'))
+
+	def view(self):
+		if len(self.args) == 0:
+			parser.error('no files given to view')
+		
+		def viewUrl(relativePath):
+			return 'http://github.com/%s/blob/%s/%s' % (self.project, self.branch, relativePath)
+		
+		self.openBrowser(self.buildUrlsFromFiles(self.args, viewUrl))
+
+	def log(self):
+		def logUrl(relativePath):
+			url = 'http://github.com/%s/commits/%s' % (self.project, self.branch)
+			if relativePath != None:
+				url += '/' + relativePath
+			return url
+				
+		if len(self.args) == 0:
+			self.openBrowser(logUrl(None))
+		else:
+			self.openBrowser(self.buildUrlsFromFiles(self.args, logUrl))
+
+	def browse(self):
+		self.openBrowser('http://github.com/%s/tree/%s' % (self.project, self.branch))
+		
+	def help(self):
+		parser.print_usage()
+		sys.exit(0)
+	
+	def runCommand(self, command):
+		if command in self.__commands__:
+			self.__commands__[command]()
+		else:
+			parser.error('command "%s" not found' % command)
+
+github = Github(options, args[1:], os.getcwd())
+github.runCommand(args[0])
