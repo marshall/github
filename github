@@ -87,7 +87,12 @@ class Github:
 		return gitDir
 	
 	def inGitTree(self, path):
-		(out, err) = self.git('ls-tree', 'HEAD', path)
+		cwd = os.getcwd()
+		os.chdir(self.root)
+		absolutePath = os.path.abspath(os.path.join(cwd, path))
+		rootRelative = absolutePath[len(self.root)+1:]
+		(out, err) = self.git('ls-tree', 'HEAD', rootRelative)
+		os.chdir(cwd)
 		return len(out.strip()) > 0
 		
 	def openBrowser(self, urls):
